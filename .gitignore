@@ -1,0 +1,4 @@
+data/*
+*_files/*
+.Rproj.user/*
+*.html

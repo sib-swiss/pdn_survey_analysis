@@ -1,0 +1,421 @@
+---
+title: "Pathogen Data Network Survey Analysis"
+author: "Your Name"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+## Setup
+
+Load required packages:
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(scales)
+library(here)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(sf)
+```
+
+## Load Data
+
+SurveyMonkey exports have questions in row 1, possible answers (for multiple choice) in row 2, and actual responses starting from row 3.
+
+```{r}
+#| message: false
+#| label: load-data
+
+# Read the survey data
+survey_file <- here("data", "Pathogen Data Network Global Survey of Pathogen Data Stakeholders.xlsx")
+question_file <- here("data", "question_data.xlsx")
+
+# Read first two rows to get questions and answer options
+
+questions <- read_excel(question_file)
+
+# questions <- read_excel(survey_file, n_max = 2, col_names = FALSE)
+
+questions_row <- pull(questions, question_short)
+answers_row <- pull(questions, plot_answer)
+
+# Read the actual data (starting from row 3)
+raw_responses <- read_excel(survey_file, skip = 2, col_names = FALSE) |> as.matrix()
+tf_responses <- !is.na(raw_responses)
+
+for(i in 1:ncol(raw_responses)) {
+  raw_responses[tf_responses[,i], i] <- answers_row[i]
+}
+
+
+# Display structure
+cat("Number of respondents:", nrow(raw_responses), "\n")
+cat("Number of columns:", ncol(raw_responses), "\n")
+```
+
+## Data Preparation
+
+Parse the SurveyMonkey structure and create organized data frames:
+
+```{r}
+#| label: prepare-data
+question_list <- list()
+qnum <- 0
+
+
+for (i in seq_along(questions_row)) {
+  if (!is.na(questions_row[i])) {
+    qnum <- qnum + 1
+    qid <- paste0("q_", sprintf("%03s", qnum))
+    # initiate new question
+    question_list[[qid]] <- list(
+      question = questions_row[i],
+      answers =  answers_row[i],
+      qstart = i,
+      qend = i
+    )
+  } else {
+    question_list[[qid]][["answers"]] <- c(question_list[[qid]][["answers"]], answers_row[i])
+    question_list[[qid]][["qend"]] <- i
+  }
+}
+
+answer_matrix <- matrix(nrow = nrow(raw_responses),
+                        ncol = length(question_list))
+colnames(answer_matrix) <- names(question_list)
+
+for (qid in names(question_list)) {
+  qstart <- question_list[[qid]]$qstart
+  qend <- question_list[[qid]]$qend
+
+  if (qstart == qend) {
+    
+    answer_matrix[, qid] <- raw_responses[, qstart]
+  } else {
+    answer_matrix[, qid] <- apply(raw_responses[, c(qstart:qend)], 1, function(x) {
+      paste(x[!is.na(x)], collapse = ";")
+    })
+  }
+}
+
+answer_df <- as.data.frame(answer_matrix)
+
+```
+
+## Plotting Functions
+
+Helper functions for visualizing multiple choice question results:
+
+```{r}
+#| label: plotting-functions
+
+# Function to plot bar chart for multiple choice questions
+plot_mc_bar <- function(answer_df, qid, question_list, frequency_cutoff = 1) {
+  
+  # Extract question text
+  question_text <- question_list[[qid]]$question
+  
+  # Get answers for this question (exclude empty responses)
+  answers <- answer_df[, qid]
+  answers <- answers[!is.na(answers) & answers != ""]
+  
+  # Handle multiple selections (split by semicolon)
+  all_answers <- unlist(strsplit(answers, ";"))
+  
+  # Count frequencies
+  answer_counts <- as.data.frame(table(all_answers)) |>
+    rename(answer = all_answers, count = Freq) |>
+    arrange(desc(count))
+  
+  # Apply frequency cutoff
+  answer_counts <- answer_counts |>
+    mutate(
+      answer_display = ifelse(count >= frequency_cutoff, as.character(answer), "Other")
+    ) |>
+    group_by(answer_display) |>
+    summarise(count = sum(count), .groups = "drop") |>
+    arrange(desc(count))
+  
+  # Reorder factor levels for plotting (keep "Other" at the end if present)
+  if ("Other" %in% answer_counts$answer_display) {
+    other_row <- answer_counts |> filter(answer_display == "Other")
+    answer_counts <- answer_counts |> 
+      filter(answer_display != "Other") |>
+      bind_rows(other_row)
+  }
+  
+  answer_counts$answer_display <- factor(
+    answer_counts$answer_display,
+    levels = rev(answer_counts$answer_display)
+  )
+  
+  # Create bar chart
+  ggplot(answer_counts, aes(x = answer_display, y = count)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    geom_text(aes(label = count), hjust = -0.2, size = 3.5) +
+    coord_flip() +
+    labs(
+      title = str_wrap(question_text, width = 80),
+      x = NULL,
+      y = "Number of Responses"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 12, face = "bold"),
+      axis.text.y = element_text(size = 10),
+      panel.grid.major.y = element_blank()
+    ) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.15)))
+}
+
+# Function to plot pie chart for multiple choice questions
+plot_mc_pie <- function(answer_df, qid, question_list, frequency_cutoff = 1) {
+  
+  # Extract question text
+  question_text <- question_list[[qid]]$question
+  
+  # Get answers for this question (exclude empty responses)
+  answers <- answer_df[, qid]
+  answers <- answers[!is.na(answers) & answers != ""]
+  
+  # Handle multiple selections (split by semicolon)
+  all_answers <- unlist(strsplit(answers, ";"))
+  
+  # Count frequencies
+  answer_counts <- as.data.frame(table(all_answers)) |>
+    rename(answer = all_answers, count = Freq) |>
+    arrange(desc(count))
+  
+  # Apply frequency cutoff
+  answer_counts <- answer_counts |>
+    mutate(
+      answer_display = ifelse(count >= frequency_cutoff, as.character(answer), "Other")
+    ) |>
+    group_by(answer_display) |>
+    summarise(count = sum(count), .groups = "drop") |>
+    arrange(desc(count))
+  
+  # Calculate percentages
+  answer_counts <- answer_counts |>
+    mutate(
+      percentage = count / sum(count) * 100,
+      label = paste0(answer_display, "\n(", round(percentage, 1), "%)")
+    )
+  
+  # Create pie chart
+  ggplot(answer_counts, aes(x = "", y = count, fill = answer_display)) +
+    geom_bar(stat = "identity", width = 1, color = "white") +
+    coord_polar("y", start = 0) +
+    labs(
+      title = str_wrap(question_text, width = 80),
+      fill = "Response"
+    ) +
+    theme_void() +
+    theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 10)),
+      legend.position = "right",
+      legend.text = element_text(size = 9)
+    ) +
+    scale_fill_brewer(palette = "Set3", labels = function(x) str_wrap(x, width = 25))
+}
+
+# Function to plot multiple barrier questions in one chart
+plot_barrier_questions <- function(answer_df, qid_range, question_list) {
+  
+  # Collect data for all questions
+  barrier_data <- map_df(qid_range, function(qid) {
+    question_text <- question_list[[qid]]$question
+    answers <- answer_df[, qid]
+    
+    # Explicitly filter out NA and empty strings
+    answers <- answers[!is.na(answers) & nchar(trimws(answers)) > 0]
+    
+    # Count responses
+    counts <- as.data.frame(table(answers, useNA = "no")) |>
+      rename(response = answers, count = Freq) |>
+      filter(count > 0)
+    
+    # Add question info
+    counts$question <- question_text
+    counts$qid <- qid
+    
+    return(counts)
+  })
+  
+  # Check unique responses to ensure proper matching
+  unique_responses <- unique(barrier_data$response)
+  
+  # Calculate percentages and order by "Significant barrier"
+  barrier_summary <- barrier_data |>
+    group_by(question, qid) |>
+    mutate(
+      total = sum(count),
+      percentage = count / total * 100
+    ) |>
+    ungroup()
+  
+  # Calculate ordering based on "Significant barrier" percentage
+  question_order <- barrier_summary |>
+    filter(response == "Significant Barrier") |>
+    arrange(percentage) |>
+    pull(question)
+  
+  # Create factor with ordering
+  barrier_summary$question <- factor(barrier_summary$question, levels = question_order)
+  
+  # Order response levels for stacking
+  barrier_summary$response <- factor(
+    barrier_summary$response,
+    levels = c("Not applicable", "Not a Significant Barrier", "Significant Barrier")
+  )
+  
+  # Get actual response values present in data
+  response_values <- setNames(
+    c("grey80", "lightblue", "firebrick3"),
+    c("Not applicable", "Not a Significant Barrier", "Significant Barrier")
+  )
+  
+  # Filter to only responses present in the data
+  response_values <- response_values[names(response_values) %in% unique_responses]
+  
+  # Create stacked bar chart
+  ggplot(barrier_summary, aes(x = percentage, y = question, fill = response)) +
+    geom_bar(stat = "identity", position = "stack", width = 0.8) +
+    geom_text(
+      aes(label = ifelse(percentage > 5, paste0(round(percentage, 0), "%"), "")),
+      position = position_stack(vjust = 0.5),
+      size = 3,
+      color = "white",
+      fontface = "bold"
+    ) +
+    scale_fill_manual(
+      values = response_values,
+      name = "Response",
+      drop = FALSE
+    ) +
+    labs(
+      title = "Barriers to Pathogen Data Sharing",
+      subtitle = "Questions ordered by frequency of 'Significant barrier' responses",
+      x = "Percentage of Responses",
+      y = NULL
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold"),
+      plot.subtitle = element_text(size = 11),
+      axis.text.y = element_text(size = 9),
+      legend.position = "bottom",
+      panel.grid.major.y = element_blank(),
+      plot.margin = margin(5, 15, 5, 5)
+    ) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 100))
+}
+```
+
+```{r}
+#| fig-width: 12
+#| fig-height: 6
+# For questions q_013 through q_029
+plot_barrier_questions(
+  answer_matrix, 
+  qid_range = paste0("q_", sprintf("%03d", 13:29)), 
+  question_list
+)
+```
+
+
+```{r}
+plot_mc_bar(answer_df, qid = "q_018", question_list)
+plot_mc_pie(answer_df, qid = "q_018", question_list)
+```
+
+
+## Geographic Distribution
+
+Visualize the geographic distribution of respondents based on their country of work (Question 17):
+
+```{r}
+#| label: map-respondents
+#| fig-width: 12
+#| fig-height: 8
+
+# Count respondents by country (exclude empty responses)
+country_counts <- as.data.frame(table(answer_matrix[, "q_017"])) |>
+  filter(Var1 != "") |>
+  rename(survey_country = Var1, n_respondents = Freq)
+
+# Get world map data
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Create mapping between survey country names and map country names
+country_mapping <- data.frame(
+  survey_country = c(
+    "United Kingdom of Great Britain and Northern Ireland"
+  ),
+  map_country = c(
+    "United Kingdom"
+  )
+)
+
+# Apply mapping to survey data
+country_counts <- country_counts |>
+  left_join(country_mapping, by = "survey_country") |>
+  mutate(country_name = coalesce(map_country, survey_country)) |>
+  select(country_name, n_respondents)
+
+# Join with world map data
+world_data <- world |>
+  left_join(country_counts, by = c("name" = "country_name"))
+
+# Create the map
+ggplot(world_data) +
+  geom_sf(aes(fill = n_respondents), color = "white", size = 0.2) +
+  scale_fill_distiller(
+    name = "Number of\nRespondents",
+    na.value = "darkgrey",
+    palette = "Reds",
+    direction = 1,
+    trans = "log1p",
+    breaks = c(1, 2, 5, 10, 20)
+  ) +
+  labs(
+    title = "Geographic Distribution of Survey Respondents",
+    subtitle = "Number of respondents by country of work (Question 17)",
+    caption = "Grey countries: no respondents"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank()
+  )
+```
+
+Summary of respondent countries:
+
+```{r}
+#| label: country-summary
+
+country_counts |>
+  arrange(desc(n_respondents)) |>
+  knitr::kable(
+    col.names = c("Country", "Number of Respondents"),
+    caption = "Survey respondents by country"
+  )
+```
+
