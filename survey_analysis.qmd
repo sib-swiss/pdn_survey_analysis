@@ -28,6 +28,7 @@ library(here)
 library(rnaturalearth)
 library(rnaturalearthdata)
 library(sf)
+library(cowplot)
 ```
 
 ## Load Data
@@ -53,6 +54,8 @@ answers_row <- pull(questions, plot_answer)
 
 # Read the actual data (starting from row 3)
 raw_responses <- read_excel(survey_file, skip = 2, col_names = FALSE) |> as.matrix()
+empty_responses <- apply(raw_responses[,11:ncol(raw_responses)], 1, function(x) all(is.na(x)))
+raw_responses <- raw_responses[!empty_responses, ]
 tf_responses <- !is.na(raw_responses)
 
 for(i in 1:ncol(raw_responses)) {
@@ -110,7 +113,18 @@ for (qid in names(question_list)) {
   }
 }
 
+answer_matrix[is.na(answer_matrix)] <- ""
+
+unanswered <- apply(answer_matrix, 1, function(x) sum(x == ""))
+
+cat("Repondents leaving 30 questions or more unanswered:", sum(unanswered >= 30), "\n")
+
+answer_matrix <- answer_matrix[unanswered < 30, ]
+
 answer_df <- as.data.frame(answer_matrix)
+
+cat("Number of completed responses:", nrow(answer_matrix), "\n")
+
 
 ```
 
@@ -122,224 +136,127 @@ Helper functions for visualizing multiple choice question results:
 #| label: plotting-functions
 
 # Function to plot bar chart for multiple choice questions
-plot_mc_bar <- function(answer_df, qid, question_list, frequency_cutoff = 1) {
-  
-  # Extract question text
-  question_text <- question_list[[qid]]$question
-  
-  # Get answers for this question (exclude empty responses)
-  answers <- answer_df[, qid]
-  answers <- answers[!is.na(answers) & answers != ""]
-  
-  # Handle multiple selections (split by semicolon)
-  all_answers <- unlist(strsplit(answers, ";"))
-  
-  # Count frequencies
-  answer_counts <- as.data.frame(table(all_answers)) |>
-    rename(answer = all_answers, count = Freq) |>
-    arrange(desc(count))
-  
-  # Apply frequency cutoff
-  answer_counts <- answer_counts |>
-    mutate(
-      answer_display = ifelse(count >= frequency_cutoff, as.character(answer), "Other")
-    ) |>
-    group_by(answer_display) |>
-    summarise(count = sum(count), .groups = "drop") |>
-    arrange(desc(count))
-  
-  # Reorder factor levels for plotting (keep "Other" at the end if present)
-  if ("Other" %in% answer_counts$answer_display) {
-    other_row <- answer_counts |> filter(answer_display == "Other")
-    answer_counts <- answer_counts |> 
-      filter(answer_display != "Other") |>
-      bind_rows(other_row)
-  }
-  
-  answer_counts$answer_display <- factor(
-    answer_counts$answer_display,
-    levels = rev(answer_counts$answer_display)
-  )
-  
-  # Create bar chart
-  ggplot(answer_counts, aes(x = answer_display, y = count)) +
-    geom_bar(stat = "identity", fill = "steelblue") +
-    geom_text(aes(label = count), hjust = -0.2, size = 3.5) +
-    coord_flip() +
-    labs(
-      title = str_wrap(question_text, width = 80),
-      x = NULL,
-      y = "Number of Responses"
-    ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 12, face = "bold"),
-      axis.text.y = element_text(size = 10),
-      panel.grid.major.y = element_blank()
-    ) +
-    scale_y_continuous(expand = expansion(mult = c(0, 0.15)))
-}
-
-# Function to plot pie chart for multiple choice questions
-plot_mc_pie <- function(answer_df, qid, question_list, frequency_cutoff = 1) {
-  
-  # Extract question text
-  question_text <- question_list[[qid]]$question
-  
-  # Get answers for this question (exclude empty responses)
-  answers <- answer_df[, qid]
-  answers <- answers[!is.na(answers) & answers != ""]
-  
-  # Handle multiple selections (split by semicolon)
-  all_answers <- unlist(strsplit(answers, ";"))
-  
-  # Count frequencies
-  answer_counts <- as.data.frame(table(all_answers)) |>
-    rename(answer = all_answers, count = Freq) |>
-    arrange(desc(count))
-  
-  # Apply frequency cutoff
-  answer_counts <- answer_counts |>
-    mutate(
-      answer_display = ifelse(count >= frequency_cutoff, as.character(answer), "Other")
-    ) |>
-    group_by(answer_display) |>
-    summarise(count = sum(count), .groups = "drop") |>
-    arrange(desc(count))
-  
-  # Calculate percentages
-  answer_counts <- answer_counts |>
-    mutate(
-      percentage = count / sum(count) * 100,
-      label = paste0(answer_display, "\n(", round(percentage, 1), "%)")
-    )
-  
-  # Create pie chart
-  ggplot(answer_counts, aes(x = "", y = count, fill = answer_display)) +
-    geom_bar(stat = "identity", width = 1, color = "white") +
-    coord_polar("y", start = 0) +
-    labs(
-      title = str_wrap(question_text, width = 80),
-      fill = "Response"
-    ) +
-    theme_void() +
-    theme(
-      plot.title = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 10)),
-      legend.position = "right",
-      legend.text = element_text(size = 9)
-    ) +
-    scale_fill_brewer(palette = "Set3", labels = function(x) str_wrap(x, width = 25))
-}
-
-# Function to plot multiple barrier questions in one chart
-plot_barrier_questions <- function(answer_df, qid_range, question_list) {
-  
-  # Collect data for all questions
-  barrier_data <- map_df(qid_range, function(qid) {
-    question_text <- question_list[[qid]]$question
-    answers <- answer_df[, qid]
-    
-    # Explicitly filter out NA and empty strings
-    answers <- answers[!is.na(answers) & nchar(trimws(answers)) > 0]
-    
-    # Count responses
-    counts <- as.data.frame(table(answers, useNA = "no")) |>
-      rename(response = answers, count = Freq) |>
-      filter(count > 0)
-    
-    # Add question info
-    counts$question <- question_text
-    counts$qid <- qid
-    
-    return(counts)
-  })
-  
-  # Check unique responses to ensure proper matching
-  unique_responses <- unique(barrier_data$response)
-  
-  # Calculate percentages and order by "Significant barrier"
-  barrier_summary <- barrier_data |>
-    group_by(question, qid) |>
-    mutate(
-      total = sum(count),
-      percentage = count / total * 100
-    ) |>
-    ungroup()
-  
-  # Calculate ordering based on "Significant barrier" percentage
-  question_order <- barrier_summary |>
-    filter(response == "Significant Barrier") |>
-    arrange(percentage) |>
-    pull(question)
-  
-  # Create factor with ordering
-  barrier_summary$question <- factor(barrier_summary$question, levels = question_order)
-  
-  # Order response levels for stacking
-  barrier_summary$response <- factor(
-    barrier_summary$response,
-    levels = c("Not applicable", "Not a Significant Barrier", "Significant Barrier")
-  )
-  
-  # Get actual response values present in data
-  response_values <- setNames(
-    c("grey80", "lightblue", "firebrick3"),
-    c("Not applicable", "Not a Significant Barrier", "Significant Barrier")
-  )
-  
-  # Filter to only responses present in the data
-  response_values <- response_values[names(response_values) %in% unique_responses]
-  
-  # Create stacked bar chart
-  ggplot(barrier_summary, aes(x = percentage, y = question, fill = response)) +
-    geom_bar(stat = "identity", position = "stack", width = 0.8) +
-    geom_text(
-      aes(label = ifelse(percentage > 5, paste0(round(percentage, 0), "%"), "")),
-      position = position_stack(vjust = 0.5),
-      size = 3,
-      color = "white",
-      fontface = "bold"
-    ) +
-    scale_fill_manual(
-      values = response_values,
-      name = "Response",
-      drop = FALSE
-    ) +
-    labs(
-      title = "Barriers to Pathogen Data Sharing",
-      subtitle = "Questions ordered by frequency of 'Significant barrier' responses",
-      x = "Percentage of Responses",
-      y = NULL
-    ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      plot.subtitle = element_text(size = 11),
-      axis.text.y = element_text(size = 9),
-      legend.position = "bottom",
-      panel.grid.major.y = element_blank(),
-      plot.margin = margin(5, 15, 5, 5)
-    ) +
-    scale_x_continuous(expand = c(0, 0), limits = c(0, 100))
-}
+source("plotting_functions.R")
 ```
 
 ```{r}
-#| fig-width: 12
-#| fig-height: 6
+#| fig-width: 8
 # For questions q_013 through q_029
-plot_barrier_questions(
+barrier_questions <- paste0("q_", sprintf("%03d", 13:29))
+
+barrier_questions_plot_combined <- plot_barrier_questions(
   answer_matrix, 
-  qid_range = paste0("q_", sprintf("%03d", 13:29)), 
+  qid_range = barrier_questions, 
   question_list
 )
+
+pdf_filename <- here("output", "combined", "barrier_questions.pdf")
+ggsave(pdf_filename, plot = barrier_questions_plot_combined, width = 7, height = 5, device = "pdf")
+
+png_filename <- here("output", "combined", "barrier_questions.png")
+ggsave(png_filename, plot = barrier_questions_plot_combined, width = 8, height = 8, device = "png", dpi = 300)
+
+print(barrier_questions_plot_combined)
 ```
 
 
 ```{r}
-plot_mc_bar(answer_df, qid = "q_018", question_list)
-plot_mc_pie(answer_df, qid = "q_018", question_list)
+mc_questions <- names(question_list)[sapply(question_list,
+                                            function(x){
+                                              x$qstart != x$qend
+                                            })]
+
+# excluding barrier questions and country question (q_033)
+mc_questions <- mc_questions[! mc_questions %in% c(barrier_questions, "q_033")]
+
+mc_combined_plot_list <- list()
+
+for(qid in mc_questions){
+  # Get answers and count unique values
+
+  n_answers <- length(question_list[[qid]]$answers)
+  
+  # Calculate dynamic height (minimum 4 inches, add 0.4 inch per answer)
+  plot_height <- max(4, n_answers * 0.4 + 2)
+  
+  # Create plot
+  p <- plot_mc_bar(answer_df, qid, question_list)
+  
+  mc_combined_plot_list[[qid]] <- p
+  
+  # Save as PDF
+  pdf_filename <- here("output", "combined", paste0("barplot_", qid, ".pdf"))
+  ggsave(pdf_filename, plot = p, width = 7, height = plot_height, device = "pdf")
+  
+  # Save as PNG
+  png_filename <- here("output", "combined", paste0("barplot_", qid, ".png"))
+  ggsave(png_filename, plot = p, width = 7, height = plot_height, device = "png", dpi = 300)
+  
+  # Also print to document
+  print(p)
+}
 ```
+
+
+```{r}
+#| fig-width: 8
+#| fig-height: 12
+
+compare_questions <- mc_questions[mc_questions != "q_012"]
+
+mc_comparison_plot_list <- list()
+
+for(qid in compare_questions) {
+  
+    n_answers <- length(question_list[[qid]]$answers)
+  
+  # Calculate dynamic height (minimum 4 inches, add 0.4 inch per answer)
+  plot_height <- max(4, n_answers * 0.4 + 2)
+
+  
+  # Save as PDF
+
+  p <- plot_mc_comparison(
+  answer_df, 
+  qid = qid,  # The question to compare
+  question_list, 
+  grouping_qid = "q_012",  # The grouping question
+  group1_value = "Analyst, Researcher, or Public healthcare professional",
+  group2_value = "Trainer or Educator",
+  frequency_cutoff = 1,
+  show_percentages = TRUE)  # Use FALSE for counts
+  
+  mc_comparison_plot_list[[qid]] <- p
+  
+  pdf_filename <- here("output", "comparison", paste0("barplot_", qid, ".pdf"))
+  ggsave(pdf_filename, plot = p, width = 8, height = plot_height, device = "pdf")
+  
+  png_filename <- here("output", "comparison", paste0("barplot_", qid, ".png"))
+  ggsave(png_filename, plot = p, width = 8, height = plot_height, device = "png", dpi = 300)
+}
+
+```
+
+
+```{r}
+#| fig-height: 10
+p <- plot_barrier_questions(
+  answer_df, qid_range = barrier_questions, question_list,
+  grouping_qid = "q_012",
+  group1_value = "Analyst, Researcher, or Public healthcare professional",
+  group2_value = "Trainer or Educator"
+)
+
+pdf_filename <- here("output", "comparison", "barrier_questions.pdf")
+ggsave(pdf_filename, plot = p, width = 10, height = 8, device = "pdf")
+
+png_filename <- here("output", "comparison", "barrier_questions.png")
+ggsave(png_filename, plot = p, width = 10, height = 8, device = "png", dpi = 300)
+
+print(p)
+```
+
+
 
 
 ## Geographic Distribution
@@ -352,9 +269,10 @@ Visualize the geographic distribution of respondents based on their country of w
 #| fig-height: 8
 
 # Count respondents by country (exclude empty responses)
-country_counts <- as.data.frame(table(answer_matrix[, "q_017"])) |>
+country_counts <- as.data.frame(table(answer_matrix[, "q_033"])) |>
   filter(Var1 != "") |>
-  rename(survey_country = Var1, n_respondents = Freq)
+  rename(survey_country = Var1, n_respondents = Freq) |>
+  mutate(percentage = n_respondents/sum(n_respondents))
 
 # Get world map data
 world <- ne_countries(scale = "medium", returnclass = "sf")
@@ -373,14 +291,20 @@ country_mapping <- data.frame(
 country_counts <- country_counts |>
   left_join(country_mapping, by = "survey_country") |>
   mutate(country_name = coalesce(map_country, survey_country)) |>
-  select(country_name, n_respondents)
+  select(country_name, n_respondents) |>
+  mutate(percentage = round(n_respondents/sum(n_respondents)*100, 1)) |>
+  arrange(desc(n_respondents))
 
 # Join with world map data
 world_data <- world |>
   left_join(country_counts, by = c("name" = "country_name"))
 
+knitr::kable(country_counts)
+```
+
+```{r}
 # Create the map
-ggplot(world_data) +
+world_map_plot <- ggplot(world_data) +
   geom_sf(aes(fill = n_respondents), color = "white", size = 0.2) +
   scale_fill_distiller(
     name = "Number of\nRespondents",
@@ -391,8 +315,8 @@ ggplot(world_data) +
     breaks = c(1, 2, 5, 10, 20)
   ) +
   labs(
-    title = "Geographic Distribution of Survey Respondents",
-    subtitle = "Number of respondents by country of work (Question 17)",
+    # title = "Geographic Distribution of Survey Respondents",
+    # subtitle = "Number of respondents by country of work (Question 17)",
     caption = "Grey countries: no respondents"
   ) +
   theme_minimal() +
@@ -404,18 +328,56 @@ ggplot(world_data) +
     axis.title = element_blank(),
     panel.grid = element_blank()
   )
+
+pdf_filename <- here("output", "combined", "world_map.pdf")
+ggsave(pdf_filename, plot = world_map_plot, width = 10, height = 6, device = "pdf")
+
+png_filename <- here("output", "combined", "world_map.png")
+ggsave(png_filename, plot = world_map_plot, width = 10, height = 6, device = "png", dpi = 300)
+
+print(world_map_plot)
 ```
 
-Summary of respondent countries:
-
 ```{r}
-#| label: country-summary
+#| fig-width: 14
+panel_1 <- plot_grid(mc_combined_plot_list[["q_012"]],
+                     world_map_plot,
+                     mc_combined_plot_list[["q_035"]],
+                     mc_combined_plot_list[["q_034"]],
+                     labels = LETTERS[1:4])
 
-country_counts |>
-  arrange(desc(n_respondents)) |>
-  knitr::kable(
-    col.names = c("Country", "Number of Respondents"),
-    caption = "Survey respondents by country"
-  )
+ggsave(here("output", "panel_1.pdf"), width = 12, height = 8)
+print(panel_1)
+
+panel_2 <- plot_grid(barrier_questions_plot_combined,
+                    mc_combined_plot_list[["q_030"]],
+                    labels = LETTERS[1:2],
+                    rel_widths = c(1.1, 0.9))
+
+ggsave(here("output", "panel_2.pdf"), width = 12, height = 8)
+print(panel_2)
+
+panel_3 <- plot_grid(mc_combined_plot_list[["q_031"]],
+                     mc_comparison_plot_list[["q_031"]],
+                     labels = LETTERS[1:2])
+
+ggsave(here("output", "panel_3.pdf"), width = 12, height = 8)
+print(panel_3)
+
+panel_4 <- plot_grid(mc_combined_plot_list[["q_032"]],
+                     mc_comparison_plot_list[["q_032"]],
+                     labels = LETTERS[1:2])
+
+ggsave(here("output", "panel_4.pdf"), width = 12, height = 5)
+print(panel_4)
+
+panel_5 <- plot_grid(mc_combined_plot_list[["q_038"]],
+                     mc_comparison_plot_list[["q_038"]],
+                     labels = LETTERS[1:2])
+
+ggsave(here("output", "panel_5.pdf"), width = 12, height = 9)
+print(panel_5)
+
+
 ```
 

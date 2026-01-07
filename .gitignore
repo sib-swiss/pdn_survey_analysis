@@ -2,3 +2,7 @@ data/*
 *_files/*
 .Rproj.user/*
 *.html
+.Rproj.user
+.DS_Store
+.Rhistory
+output/*
