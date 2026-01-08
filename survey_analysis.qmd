@@ -29,6 +29,7 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(sf)
 library(cowplot)
+library(patchwork)
 ```
 
 ## Load Data
@@ -357,27 +358,35 @@ panel_2 <- plot_grid(barrier_questions_plot_combined,
 ggsave(here("output", "panel_2.pdf"), width = 12, height = 8)
 print(panel_2)
 
-panel_3 <- plot_grid(mc_combined_plot_list[["q_031"]],
-                     mc_comparison_plot_list[["q_031"]],
-                     labels = LETTERS[1:2])
+panel_3 <- plot_mc_combined(answer_df, "q_031", question_list,
+                 grouping_qid = "q_012",
+                 group1_value = "Analyst, Researcher, or Public healthcare professional",
+                 group2_value = "Trainer or Educator",
+                 frequency_cutoff = 4)
 
-ggsave(here("output", "panel_3.pdf"), width = 12, height = 8)
+ggsave(here("output", "panel_3.pdf"), width = 10, height = 8)
 print(panel_3)
 
-panel_4 <- plot_grid(mc_combined_plot_list[["q_032"]],
-                     mc_comparison_plot_list[["q_032"]],
-                     labels = LETTERS[1:2])
+panel_4 <- plot_mc_combined(answer_df, "q_032", question_list,
+                 grouping_qid = "q_012",
+                 group1_value = "Analyst, Researcher, or Public healthcare professional",
+                 group2_value = "Trainer or Educator",
+                 frequency_cutoff = 2)
 
-ggsave(here("output", "panel_4.pdf"), width = 12, height = 5)
+ggsave(here("output", "panel_4.pdf"), width = 10, height = 5)
 print(panel_4)
 
-panel_5 <- plot_grid(mc_combined_plot_list[["q_038"]],
-                     mc_comparison_plot_list[["q_038"]],
-                     labels = LETTERS[1:2])
+panel_5 <- plot_mc_combined(answer_df, "q_038", question_list,
+                 grouping_qid = "q_012",
+                 group1_value = "Analyst, Researcher, or Public healthcare professional",
+                 group2_value = "Trainer or Educator",
+                 frequency_cutoff = 2)
 
-ggsave(here("output", "panel_5.pdf"), width = 12, height = 9)
+ggsave(here("output", "panel_5.pdf"), width = 10, height = 9)
 print(panel_5)
 
 
 ```
+
+
 

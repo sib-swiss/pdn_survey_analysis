@@ -1,4 +1,4 @@
-plot_mc_bar <- function(answer_df, qid, question_list, frequency_cutoff = 1) {
+plot_mc_bar <- function(answer_df, qid, question_list, frequency_cutoff = 1, answer_order = NULL, mirror = FALSE) {
   
   # Extract question text
   question_text <- question_list[[qid]]$question
@@ -26,25 +26,48 @@ plot_mc_bar <- function(answer_df, qid, question_list, frequency_cutoff = 1) {
     arrange(desc(count))
   
   # Reorder factor levels for plotting (keep "Other" at the end if present)
-  if ("Other" %in% answer_counts$answer_display) {
-    other_row <- answer_counts |> filter(answer_display == "Other")
-    answer_counts <- answer_counts |> 
-      filter(answer_display != "Other") |>
-      bind_rows(other_row)
+  if (is.null(answer_order)) {
+    # Use default ordering (by frequency)
+    if ("Other" %in% answer_counts$answer_display) {
+      other_row <- answer_counts |> filter(answer_display == "Other")
+      answer_counts <- answer_counts |> 
+        filter(answer_display != "Other") |>
+        bind_rows(other_row)
+    }
+    answer_counts$answer_display <- factor(
+      answer_counts$answer_display,
+      levels = rev(answer_counts$answer_display)
+    )
+  } else {
+    # Use provided ordering and ensure all levels are present
+    all_answers <- data.frame(answer_display = answer_order)
+    answer_counts <- all_answers |>
+      left_join(answer_counts, by = "answer_display") |>
+      mutate(
+        count = ifelse(is.na(count), 0, count)
+      )
+    answer_counts$answer_display <- factor(
+      answer_counts$answer_display,
+      levels = answer_order
+    )
   }
-  
-  answer_counts$answer_display <- factor(
-    answer_counts$answer_display,
-    levels = rev(answer_counts$answer_display)
-  )
   
   # Calculate percentages
   answer_counts <- answer_counts |>
     mutate(
       percentage = round(count / n_respondents * 100, 0),
-      max_count = max(count),
+      max_count = max(count, na.rm = TRUE),
       text_position = ifelse(count < max_count * 0.15, "outside", "inside")
     )
+  
+  # Adjust text positioning based on mirror mode
+  if (mirror) {
+    hjust_inside <- -0.05
+    hjust_outside <- 1.1
+  } else {
+    hjust_inside <- 1.05
+    hjust_outside <- -0.1
+  }
   
   # Create bar chart
   ggplot(answer_counts, aes(x = answer_display, y = count)) +
@@ -53,13 +76,13 @@ plot_mc_bar <- function(answer_df, qid, question_list, frequency_cutoff = 1) {
     geom_text(
       data = answer_counts |> filter(text_position == "inside"),
       aes(label = paste0(count, " (", percentage, "%)")), 
-      hjust = 1.05, size = 3.5, color = "white", fontface = "bold"
+      hjust = hjust_inside, size = 3.5, color = "white", fontface = "bold"
     ) +
     # Text outside bars (for short bars)
     geom_text(
       data = answer_counts |> filter(text_position == "outside"),
       aes(label = paste0(count, " (", percentage, "%)")), 
-      hjust = -0.1, size = 3.5, color = "black"
+      hjust = hjust_outside, size = 3.5, color = "black"
     ) +
     coord_flip() +
     labs(
@@ -74,7 +97,7 @@ plot_mc_bar <- function(answer_df, qid, question_list, frequency_cutoff = 1) {
       panel.grid.major.y = element_blank()
     ) +
     scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
-    scale_x_discrete(labels = function(x) str_wrap(x, width = 35))
+    scale_x_discrete(labels = function(x) str_wrap(x, width = 45))
 }
 
 # Function to plot multiple barrier questions in one chart
@@ -271,7 +294,7 @@ plot_barrier_questions <- function(answer_df, qid_range, question_list,
 # Function to compare responses between two groups
 plot_mc_comparison <- function(answer_df, qid, question_list, 
                                grouping_qid, group1_value, group2_value,
-                               frequency_cutoff = 1, show_percentages = TRUE) {
+                               frequency_cutoff = 1, show_percentages = TRUE, answer_order = NULL) {
   
   # Extract question text
   question_text <- question_list[[qid]]$question
@@ -282,6 +305,8 @@ plot_mc_comparison <- function(answer_df, qid, question_list,
   # Filter to only include respondents from the two groups
   group1_idx <- which(grepl(group1_value, groups, fixed = TRUE))
   group2_idx <- which(grepl(group2_value, groups, fixed = TRUE))
+
+  browser()
   
   # Function to process answers for a group
   process_group <- function(indices, group_name) {
@@ -334,12 +359,33 @@ plot_mc_comparison <- function(answer_df, qid, question_list,
       percentage = ifelse(is.na(percentage), 0, percentage)
     )
   
-  # Order answers by total frequency
-  answer_order <- answer_totals |>
-    arrange(desc(total_count)) |>
-    pull(answer)
+  # Order answers by total frequency (or use provided order)
+  if (is.null(answer_order)) {
+    answer_order_levels <- answer_totals |>
+      arrange(desc(total_count)) |>
+      pull(answer)
+  } else {
+    # Use provided ordering and ensure all levels are present in data
+    answer_order_levels <- answer_order
+    
+    # Add any missing answers from answer_order with zero counts
+    missing_answers <- setdiff(answer_order, combined_data$answer)
+    if (length(missing_answers) > 0) {
+      missing_data <- expand.grid(
+        answer = missing_answers,
+        group = c(group1_value, group2_value),
+        stringsAsFactors = FALSE
+      ) |>
+        mutate(
+          count = 0,
+          percentage = 0,
+          n_total = NA_integer_
+        )
+      combined_data <- bind_rows(combined_data, missing_data)
+    }
+  }
   
-  combined_data$answer <- factor(combined_data$answer, levels = rev(answer_order))
+  combined_data$answer <- factor(combined_data$answer, levels = answer_order_levels)
   
   # Choose y-axis (count or percentage)
   y_var <- if (show_percentages) "percentage" else "count"
@@ -349,7 +395,7 @@ plot_mc_comparison <- function(answer_df, qid, question_list,
   ggplot(combined_data, aes(x = answer, y = .data[[y_var]], fill = group)) +
     geom_bar(stat = "identity", position = "dodge", width = 0.7) +
     geom_text(
-      aes(label = if (show_percentages) paste0(round(.data[[y_var]], 0), "%") else .data[[y_var]]),
+      aes(label = if (show_percentages) paste0(count, " (", round(.data[[y_var]], 0), "%)") else count),
       position = position_dodge(width = 0.7),
       hjust = -0.1,
       size = 3
@@ -370,11 +416,69 @@ plot_mc_comparison <- function(answer_df, qid, question_list,
     theme(
       plot.title = element_text(size = 10, face = "bold"),
       plot.subtitle = element_text(size = 9, color = "gray40"),
-      axis.text.y = element_text(size = 10),
+      axis.text.y = element_text(size = 10, hjust = 0.5),
       legend.position = "top",
       legend.text = element_text(size = 8),
       panel.grid.major.y = element_blank()
     ) +
     scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
     scale_x_discrete(labels = function(x) str_wrap(x, width = 35))
+}
+
+# Function to create combined plot with consistent ordering
+plot_mc_combined <- function(answer_df, qid, question_list, 
+                             grouping_qid, group1_value, group2_value,
+                             frequency_cutoff = 1, show_percentages = TRUE) {
+  
+  # Calculate answer order from overall data (same logic as plot_mc_bar)
+  answers <- answer_df[, qid]
+  answers <- answers[!is.na(answers) & answers != ""]
+  all_answers <- unlist(strsplit(answers, ";"))
+  
+  answer_counts <- as.data.frame(table(all_answers)) |>
+    rename(answer = all_answers, count = Freq) |>
+    arrange(desc(count))
+  
+  # Apply frequency cutoff
+  answer_counts <- answer_counts |>
+    mutate(
+      answer_display = ifelse(count >= frequency_cutoff, as.character(answer), "Other")
+    ) |>
+    group_by(answer_display) |>
+    summarise(count = sum(count), .groups = "drop") |>
+    arrange(desc(count))
+  
+  # Keep "Other" at the end if present
+  if ("Other" %in% answer_counts$answer_display) {
+    other_row <- answer_counts |> filter(answer_display == "Other")
+    answer_counts <- answer_counts |> 
+      filter(answer_display != "Other") |>
+      bind_rows(other_row)
+  }
+  
+  # Create ordering vector (reversed for coord_flip)
+  answer_order <- rev(answer_counts$answer_display)
+  
+  # Create both plots with consistent ordering
+  p1 <- plot_mc_bar(answer_df, qid, question_list, 
+                    frequency_cutoff = frequency_cutoff, 
+                    answer_order = answer_order,
+                    mirror = TRUE) +
+    scale_y_reverse(expand = expansion(mult = c(0.15, 0))) +  # Reverse y-axis to mirror (after coord_flip)
+    theme(
+      axis.text.y = element_blank(),  # Remove y-axis labels from left plot
+      axis.ticks.y = element_blank()
+    )
+  
+  p2 <- plot_mc_comparison(answer_df, qid, question_list, 
+                          grouping_qid = grouping_qid,
+                          group1_value = group1_value,
+                          group2_value = group2_value,
+                          frequency_cutoff = frequency_cutoff,
+                          show_percentages = show_percentages,
+                          answer_order = answer_order)
+  
+  # Combine plots side by side using patchwork
+  # Note: requires library(patchwork)
+  p1 + p2 + plot_layout(widths = c(1, 1))
 }
