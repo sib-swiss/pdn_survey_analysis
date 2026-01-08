@@ -305,8 +305,6 @@ plot_mc_comparison <- function(answer_df, qid, question_list,
   # Filter to only include respondents from the two groups
   group1_idx <- which(grepl(group1_value, groups, fixed = TRUE))
   group2_idx <- which(grepl(group2_value, groups, fixed = TRUE))
-
-  browser()
   
   # Function to process answers for a group
   process_group <- function(indices, group_name) {
