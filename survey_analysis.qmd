@@ -113,7 +113,9 @@ for (qid in names(question_list)) {
     })
   }
 }
+```
 
+```{r}
 answer_matrix[is.na(answer_matrix)] <- ""
 
 unanswered <- apply(answer_matrix, 1, function(x) sum(x == ""))
