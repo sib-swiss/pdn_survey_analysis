@@ -308,7 +308,7 @@ knitr::kable(country_counts)
 world_map_plot <- ggplot(world_data) +
   geom_sf(aes(fill = n_respondents), color = "white", size = 0.2) +
   scale_fill_distiller(
-    name = "Number of\nRespondents",
+    name = "Number of\nResponses",
     na.value = "darkgrey",
     palette = "Reds",
     direction = 1,
