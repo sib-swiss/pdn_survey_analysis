@@ -7,6 +7,8 @@ format:
         colorlinks: true
 ---
 
+**Note: None of the questions was mandatory.**
+
 ## Participant information
 
 
