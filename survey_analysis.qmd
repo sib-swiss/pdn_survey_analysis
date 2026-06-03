@@ -347,7 +347,7 @@ panel_1 <- plot_grid(mc_combined_plot_list[["q_012"]],
                      mc_combined_plot_list[["q_034"]],
                      labels = LETTERS[1:4])
 
-ggsave(here("output", "panel_1.pdf"), width = 12, height = 8)
+ggsave(here("output", "Fig1.eps"), device = "eps", width = 12, height = 8)
 print(panel_1)
 
 panel_2 <- plot_grid(barrier_questions_plot_combined,
@@ -355,7 +355,7 @@ panel_2 <- plot_grid(barrier_questions_plot_combined,
                     labels = LETTERS[1:2],
                     rel_widths = c(1.1, 0.9))
 
-ggsave(here("output", "panel_2.pdf"), width = 12, height = 8)
+ggsave(here("output", "Fig2.eps"), width = 12, height = 8)
 print(panel_2)
 
 panel_3 <- plot_mc_combined(answer_df, "q_031", question_list,
@@ -364,7 +364,7 @@ panel_3 <- plot_mc_combined(answer_df, "q_031", question_list,
                  group2_value = "Trainer or Educator",
                  frequency_cutoff = 4)
 
-ggsave(here("output", "panel_3.pdf"), width = 10, height = 8)
+ggsave(here("output", "Fig3.eps"), width = 10, height = 8)
 print(panel_3)
 
 panel_4 <- plot_mc_combined(answer_df, "q_032", question_list,
@@ -373,7 +373,7 @@ panel_4 <- plot_mc_combined(answer_df, "q_032", question_list,
                  group2_value = "Trainer or Educator",
                  frequency_cutoff = 2)
 
-ggsave(here("output", "panel_4.pdf"), width = 10, height = 5)
+ggsave(here("output", "Fig4.eps"), width = 10, height = 5)
 print(panel_4)
 
 panel_5 <- plot_mc_combined(answer_df, "q_038", question_list,
@@ -382,7 +382,7 @@ panel_5 <- plot_mc_combined(answer_df, "q_038", question_list,
                  group2_value = "Trainer or Educator",
                  frequency_cutoff = 2)
 
-ggsave(here("output", "panel_5.pdf"), width = 10, height = 9)
+ggsave(here("output", "Fig5.eps"), width = 10, height = 9)
 print(panel_5)
 
 
