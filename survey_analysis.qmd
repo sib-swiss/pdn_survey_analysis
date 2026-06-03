@@ -41,8 +41,11 @@ SurveyMonkey exports have questions in row 1, possible answers (for multiple cho
 #| label: load-data
 
 # Read the survey data
-survey_file <- here("data", "Pathogen Data Network Global Survey of Pathogen Data Stakeholders.xlsx")
-question_file <- here("data", "question_data.xlsx")
+survey_url <- "https://zenodo.org/records/19494321/files/survey_results_share.xlsx"
+survey_file <- here("data", "survey_results_share.xlsx")
+download.file(survey_url, destfile = survey_file, mode = "wb")
+
+question_file <- here("question_data_share.xlsx")
 
 # Read first two rows to get questions and answer options
 
@@ -142,8 +145,8 @@ source("plotting_functions.R")
 
 ```{r}
 #| fig-width: 8
-# For questions q_013 through q_029
-barrier_questions <- paste0("q_", sprintf("%03d", 13:29))
+# For questions q_007 through q_023
+barrier_questions <- paste0("q_", sprintf("%03d", 7:23))
 
 barrier_questions_plot_combined <- plot_barrier_questions(
   answer_matrix, 
@@ -167,8 +170,8 @@ mc_questions <- names(question_list)[sapply(question_list,
                                               x$qstart != x$qend
                                             })]
 
-# excluding barrier questions and country question (q_033)
-mc_questions <- mc_questions[! mc_questions %in% c(barrier_questions, "q_033")]
+# excluding barrier questions and country question (q_027)
+mc_questions <- mc_questions[! mc_questions %in% c(barrier_questions, "q_027")]
 
 mc_combined_plot_list <- list()
 
@@ -203,11 +206,12 @@ for(qid in mc_questions){
 #| fig-width: 8
 #| fig-height: 12
 
-compare_questions <- mc_questions[mc_questions != "q_012"]
+compare_questions <- mc_questions[mc_questions != "q_006"]
 
 mc_comparison_plot_list <- list()
 
 for(qid in compare_questions) {
+  print(qid)
   
     n_answers <- length(question_list[[qid]]$answers)
   
@@ -221,7 +225,7 @@ for(qid in compare_questions) {
   answer_df, 
   qid = qid,  # The question to compare
   question_list, 
-  grouping_qid = "q_012",  # The grouping question
+  grouping_qid = "q_006",  # The grouping question
   group1_value = "Analyst, Researcher, or Public healthcare professional",
   group2_value = "Trainer or Educator",
   frequency_cutoff = 1,
@@ -243,7 +247,7 @@ for(qid in compare_questions) {
 #| fig-height: 10
 p <- plot_barrier_questions(
   answer_df, qid_range = barrier_questions, question_list,
-  grouping_qid = "q_012",
+  grouping_qid = "q_006",
   group1_value = "Analyst, Researcher, or Public healthcare professional",
   group2_value = "Trainer or Educator"
 )
@@ -270,7 +274,7 @@ Visualize the geographic distribution of respondents based on their country of w
 #| fig-height: 8
 
 # Count respondents by country (exclude empty responses)
-country_counts <- as.data.frame(table(answer_matrix[, "q_033"])) |>
+country_counts <- as.data.frame(table(answer_matrix[, "q_027"])) |>
   filter(Var1 != "") |>
   rename(survey_country = Var1, n_respondents = Freq) |>
   mutate(percentage = n_respondents/sum(n_respondents))
@@ -341,25 +345,25 @@ print(world_map_plot)
 
 ```{r}
 #| fig-width: 14
-panel_1 <- plot_grid(mc_combined_plot_list[["q_012"]],
+panel_1 <- plot_grid(mc_combined_plot_list[["q_006"]],
                      world_map_plot,
-                     mc_combined_plot_list[["q_035"]],
-                     mc_combined_plot_list[["q_034"]],
+                     mc_combined_plot_list[["q_029"]],
+                     mc_combined_plot_list[["q_028"]],
                      labels = LETTERS[1:4])
 
 ggsave(here("output", "Fig1.eps"), device = "eps", width = 12, height = 8)
 print(panel_1)
 
 panel_2 <- plot_grid(barrier_questions_plot_combined,
-                    mc_combined_plot_list[["q_030"]],
+                    mc_combined_plot_list[["q_024"]],
                     labels = LETTERS[1:2],
                     rel_widths = c(1.1, 0.9))
 
 ggsave(here("output", "Fig2.eps"), width = 12, height = 8)
 print(panel_2)
 
-panel_3 <- plot_mc_combined(answer_df, "q_031", question_list,
-                 grouping_qid = "q_012",
+panel_3 <- plot_mc_combined(answer_df, "q_025", question_list,
+                 grouping_qid = "q_006",
                  group1_value = "Analyst, Researcher, or Public healthcare professional",
                  group2_value = "Trainer or Educator",
                  frequency_cutoff = 4)
@@ -367,8 +371,8 @@ panel_3 <- plot_mc_combined(answer_df, "q_031", question_list,
 ggsave(here("output", "Fig3.eps"), width = 10, height = 8)
 print(panel_3)
 
-panel_4 <- plot_mc_combined(answer_df, "q_032", question_list,
-                 grouping_qid = "q_012",
+panel_4 <- plot_mc_combined(answer_df, "q_026", question_list,
+                 grouping_qid = "q_006",
                  group1_value = "Analyst, Researcher, or Public healthcare professional",
                  group2_value = "Trainer or Educator",
                  frequency_cutoff = 2)
@@ -376,8 +380,8 @@ panel_4 <- plot_mc_combined(answer_df, "q_032", question_list,
 ggsave(here("output", "Fig4.eps"), width = 10, height = 5)
 print(panel_4)
 
-panel_5 <- plot_mc_combined(answer_df, "q_038", question_list,
-                 grouping_qid = "q_012",
+panel_5 <- plot_mc_combined(answer_df, "q_030", question_list,
+                 grouping_qid = "q_006",
                  group1_value = "Analyst, Researcher, or Public healthcare professional",
                  group2_value = "Trainer or Educator",
                  frequency_cutoff = 2)
