@@ -1,0 +1,80 @@
+{
+    "upload_type": "software",
+    "title": "Accompanying code to 'Community needs for FAIR pathogen data'",
+    "license": "cc-by-4.0",
+    "keywords": [
+        "Data sharing",
+        "FAIR data",
+        "Pathogen",
+        "Infectious disease",
+        "Community support",
+        "Training",
+        "Survey",
+        "Data",
+        "Analysis",
+        "Bioinformatics",
+        "Computational biology"
+    ],
+    "creators": [
+        {
+            "name": "van Geest, Geert",
+            "affiliation": "SIB Swiss Institute of Bioinformatics",
+            "orcid": "0000-0002-1561-078X"
+        },
+        {
+            "name": "Lopez, Daniel Thomas",
+            "affiliation": "EMBL's European Bioinformatics Institute",
+            "orcid": "0000-0003-2210-6263"
+        },
+        {
+            "name": "Feitzinger, Anna",
+            "affiliation": "Cold Spring Harbor Laboratory",
+            "orcid": "0000-0001-7245-4405"
+        },
+        {
+            "name": "Weissgold, Lily Anna",
+            "affiliation": "Leibniz Institute DSMZ – German Collection of Microorganisms and Cell Cultures",
+            "orcid": "0009-0000-4765-670X"
+        },
+        {
+            "name": "Halabi, Sam",
+            "affiliation": "Georgetown University",
+            "orcid": "0000-0002-4603-8480"
+        },
+        {
+            "name": "Cuesta, Isabel",
+            "affiliation": "Bioinformatics Unit, Institute of Health Carlos III, Spain",
+            "orcid": "0000-0002-7911-9041"
+        },
+        {
+            "name": "Hjerde, Erik",
+            "affiliation": "UiT The Arctic University of Norway",
+            "orcid": "0000-0002-6014-1249"
+        },
+        {
+            "name": "Gurwitz, Kim T",
+            "affiliation": "EMBL's European Bioinformatics Institute (EMBL-EBI)",
+            "orcid": "0000-0003-1992-5073"
+        },
+        {
+            "name": "Arora, Nishtha",
+            "affiliation": "Center for Transformational Health Law, Georgetown University",
+            "orcid": "0009-0003-9236-3641"
+        },
+        {
+            "name": "Neves, Aitana",
+            "affiliation": "SIB Swiss Institute of Bioinformatics",
+            "orcid": "0000-0002-3984-6842"
+        },
+        {
+            "name": "Palagi, Patricia M.",
+            "affiliation": "SIB Swiss Institute of Bioinformatics",
+            "orcid": "0000-0001-9062-6303"
+        },
+        {
+            "name": "Williams, Jason",
+            "affiliation": "Cold Spring Harbor Laboratory",
+            "orcid": "0000-0003-3049-2010"
+        }
+    ]
+}
