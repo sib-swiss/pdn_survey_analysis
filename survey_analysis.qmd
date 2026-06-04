@@ -359,7 +359,7 @@ panel_2 <- plot_grid(barrier_questions_plot_combined,
                     labels = LETTERS[1:2],
                     rel_widths = c(1.1, 0.9))
 
-ggsave(here("output", "Fig2.eps"), width = 12, height = 8)
+ggsave(here("output", "Fig2.eps"), width = 14, height = 8)
 print(panel_2)
 
 panel_3 <- plot_mc_combined(answer_df, "q_025", question_list,
